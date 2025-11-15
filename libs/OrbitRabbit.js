@@ -3,14 +3,16 @@ import * as THREE from './three.module.js';
 
 export function OrbitRabbit(camera, options = {}) {
     const domElement = options.domElement || document;
-    const speed = options.speed || 0.2;
+    const speed = options.speed || 0.5;
     const rotateSpeed = options.rotateSpeed || 0.005;
+    const sprintMultiplier = options.sprintMultiplier || 1.5; // quanto mais rápido com shift
 
     const state = {
         forward: false,
         backward: false,
         left: false,
         right: false,
+        sprint: false, // novo estado do shift
         yaw: 0,
         pitch: 0
     };
@@ -28,6 +30,8 @@ export function OrbitRabbit(camera, options = {}) {
             case 'KeyA': state.left = true; break;
             case 'ArrowRight':
             case 'KeyD': state.right = true; break;
+            case 'ShiftLeft':
+            case 'ShiftRight': state.sprint = true; break; // shift press
         }
     });
 
@@ -41,7 +45,8 @@ export function OrbitRabbit(camera, options = {}) {
             case 'KeyA': state.left = false; break;
             case 'ArrowRight':
             case 'KeyD': state.right = false; break;
-            // Space e Shift ignorados
+            case 'ShiftLeft':
+            case 'ShiftRight': state.sprint = false; break; // shift release
         }
     });
 
@@ -69,20 +74,21 @@ export function OrbitRabbit(camera, options = {}) {
         camera.rotation.y = state.yaw;
         camera.rotation.x = state.pitch;
 
+        const currentSpeed = state.sprint ? speed * sprintMultiplier : speed;
+
         const direction = new THREE.Vector3();
         camera.getWorldDirection(direction);
-        direction.y = 0; // mantém movimento apenas no plano XZ
+        direction.y = 0; 
         direction.normalize();
 
         const right = new THREE.Vector3();
         right.crossVectors(camera.up, direction).normalize();
 
-        if (state.forward) camera.position.addScaledVector(direction, speed);
-        if (state.backward) camera.position.addScaledVector(direction, -speed);
-        if (state.left) camera.position.addScaledVector(right, speed);
-        if (state.right) camera.position.addScaledVector(right, -speed);
-        // nada de up/down
+        if (state.forward) camera.position.addScaledVector(direction, currentSpeed);
+        if (state.backward) camera.position.addScaledVector(direction, -currentSpeed);
+        if (state.left) camera.position.addScaledVector(right, currentSpeed);
+        if (state.right) camera.position.addScaledVector(right, -currentSpeed);
     }
 
-    return { update , state};
+    return { update, state };
 }

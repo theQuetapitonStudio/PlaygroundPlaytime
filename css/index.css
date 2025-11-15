@@ -1,17 +1,19 @@
-button#activesawer {
+p {
     position: absolute;
-    color: rgb(0, 0, 0);
-    background-color: white;
-    width: 20%;
-    height: 50px;
+    color: rgba(255, 255, 255, 0.075);
+    font-size: 100px;
+    line-height: 1;         /* ajuda a centralizar melhor visualmente */
+    width: auto;
+    height: auto;
     text-align: center;
     z-index: 100;
 
-    /* canto direito, centro vertical */
-    right: 10px;           /* distância do canto direito */
-    top: 40%;              /* centro vertical */
-    transform: translateY(-50%);  /* ajusta o centro real do botão */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    user-select: none;
 }
+
 
 html, body {
     margin: 0;
