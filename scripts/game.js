@@ -46,19 +46,11 @@ scene.add(ambient);
 
 // Objetos
 let grabpack = null;
-let poppy = null
 // Grabpack
 gLoader.load("../models/grabpack.glb", (model) => {
     grabpack = model.scene;
     grabpack.position.y = 6;
     scene.add(grabpack);
-});
-gLoader.load("../models/poppy.glb", (model) => {
-    poppy = model.scene;
-    poppy.scale.set(2,2,2)
-    poppy.position.y = 2;
-    poppy.position.z = 3
-    scene.add(poppy);
 });
 
 
