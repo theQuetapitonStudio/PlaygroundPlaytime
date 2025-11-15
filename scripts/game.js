@@ -5,11 +5,10 @@ import { GLTFLoader } from "../libs/GLTFLoader.js";
 // Cena e câmera
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.FogExp2(0x000000, 0.05)
+scene.fog = new THREE.FogExp2(0x000000, 0.03)
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 5, 10);
-
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -19,6 +18,10 @@ document.body.appendChild(renderer.domElement);
 const tLoader = new THREE.TextureLoader();
 const gLoader = new GLTFLoader();
 
+// clock
+
+let clock = new THREE.Clock()
+
 // Chão
 const floorTexture = tLoader.load("./textures/floor.jpeg");
 floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
@@ -27,12 +30,12 @@ floorTexture.repeat.set(20, 20);
 const floorGeometry = new THREE.PlaneGeometry(100, 100);
 const floorMaterial = new THREE.MeshStandardMaterial({
     map: floorTexture,
-    roughness: 0.9,
-    metalness: 0.5
 });
+
 const floor = new THREE.Mesh(floorGeometry, floorMaterial);
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -5;
+boost(floor)
 scene.add(floor);
 
 // Luz ambiente
@@ -46,13 +49,6 @@ scene.add(rim1);
 const rim2 = new THREE.DirectionalLight(0xffb47a, 0.3);
 rim2.position.set(0, 8, -15);
 scene.add(rim2);
-
-const key = new THREE.DirectionalLight(0xffe7d6, 1.3);
-key.position.set(-10, 15, 10);
-key.castShadow = true;
-key.shadow.mapSize.set(512, 512);
-scene.add(key);
-
 
 function boost(obj) {
     obj.traverse(c => {
@@ -75,19 +71,17 @@ function createWall(x, y, z, w, h, d) {
     scene.add(wall);
     walls.push(wall);
 }
-createWall(0, 0, -45, 100, 30, 2); // fundo
-createWall(0, 0, 45, 100, 30, 2);  // frente
-createWall(-45, 0, 0, 2, 30, 100); // esquerda
-createWall(45, 0, 0, 2, 30, 100);  // direita
+createWall(0, 0, -45, 100, 30, 2);
+createWall(0, 0, 45, 100, 30, 2);
+createWall(-45, 0, 0, 2, 30, 100);
+createWall(45, 0, 0, 2, 30, 100);
 
-// Array de obstáculos (para colisão)
 const collidables = [...walls, floor];
 
 // Raycaster para colisão
 const raycaster = new THREE.Raycaster();
 const collisionDistance = 1;
 
-// Função de colisão
 function isColliding(pos) {
     const directions = [
         new THREE.Vector3(0, 0, -1),
@@ -106,10 +100,9 @@ function isColliding(pos) {
     return false;
 }
 
-// Movimento com OrbitRabbit
+// OrbitRabbit
 const movimento = OrbitRabbit(camera);
 
-// Sobrescrevendo o update do movimento para colisão
 const originalUpdate = movimento.update.bind(movimento);
 movimento.update = function() {
     const oldPos = camera.position.clone();
@@ -122,8 +115,20 @@ movimento.update = function() {
 // Models
 let gatedoor;
 let grabpack;
+let handscanner;
+let handscannerMixer;
+let handscannerAction;
 
-// Gatedoor
+let bluehand
+let sodamachine
+
+// --- VARS DA ANIMAÇÃO SUAVE ---
+let bluehandFlying = false;
+let bluehandTargetPos = new THREE.Vector3();
+let bluehandTargetQuat = new THREE.Quaternion();
+
+// ---- LOADERS ----
+
 gLoader.load("./models/pp1gate.glb", (gltf) => {
     gatedoor = gltf.scene;
     gatedoor.scale.set(5,5,5);
@@ -135,7 +140,6 @@ gLoader.load("./models/pp1gate.glb", (gltf) => {
     collidables.push(gatedoor);
 });
 
-// Grabpack
 gLoader.load("./models/grabpack.glb", (gltf) => {
     grabpack = gltf.scene;
     grabpack.scale.set(30, 30, 30);
@@ -155,8 +159,10 @@ gLoader.load("./models/pp4box1.glb", (gltf) => {
     collidables.push(pp4box1)
 });
 
+
+
 gLoader.load("./models/mommy-soda-machine.glb", (gltf) => {
-    let sodamachine = gltf.scene
+    sodamachine = gltf.scene
     sodamachine.scale.set(7,7,7)
     sodamachine.position.set(25,-4.5,-40)
     boost(sodamachine)
@@ -164,48 +170,195 @@ gLoader.load("./models/mommy-soda-machine.glb", (gltf) => {
     collidables.push(sodamachine)
 });
 
-// --- Animação do grabpack ao andar ---
+gLoader.load("./models/blue_hand.glb", (gltf) => {
+    bluehand = gltf.scene
+    bluehand.scale.set(5,5,5)
+    bluehand.position.set(10,-4,0)
+    bluehand.rotation.x += 1.5
+    boost(bluehand)
+    scene.add(bluehand)
+    collidables.push(bluehand)
+});
+
+// ---- HANDSCANNER ----
+function handscannerp1(scene, collidables, camera) {
+
+    let handscanner = null;
+    let mixer = null;
+    let action = null;
+
+    gLoader.load("./models/bluehandscanner.glb", (gltf) => {
+
+        handscanner = gltf.scene;
+        handscanner.scale.set(5, 5, 5);
+        handscanner.position.y = 11;
+        handscanner.position.z = -40;
+        scene.add(handscanner);
+        collidables.push(handscanner);
+
+        if (gltf.animations && gltf.animations.length > 0) {
+            mixer = new THREE.AnimationMixer(handscanner);
+            action = mixer.clipAction(gltf.animations[0]);  
+            action.setLoop(THREE.LoopOnce);
+            action.clampWhenFinished = true;
+        }
+
+    });
+
+    function playAnim() {
+        if (!action) return;
+        action.stop();
+        action.reset();
+        action.play();
+    }
+
+    const mouse = new THREE.Vector2();
+    const clickRay = new THREE.Raycaster();
+
+    document.addEventListener("click", (e) => {
+        if (!handscanner) return;
+
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+        clickRay.setFromCamera(mouse, camera);
+        const hits = clickRay.intersectObject(handscanner, true);
+
+        if (hits.length > 0) {
+
+            playAnim();
+
+            // inicia voo suave
+            if (bluehand) {
+
+                handscanner.getWorldPosition(bluehandTargetPos);
+                handscanner.getWorldQuaternion(bluehandTargetQuat);
+
+                // ajuste fino pra ficar certinha
+               bluehandTargetPos.y += 0.5;
+bluehandTargetPos.z += 1; // empurra pra trás
+bluehandTargetPos.x += 0.2; // pequeno ajuste lateral pra encaixar perfeito
+
+setTimeout(() => {
+    movesodamachine(sodamachine, scene)
+}, 5000)
+                bluehandFlying = true;
+            }
+        }
+
+    });
+
+    const clock = new THREE.Clock();
+
+    return {
+        update() {
+            if (mixer) mixer.update(clock.getDelta());
+        }
+    };
+}
+function movesodamachine(sodamachine, cena) {
+    if (sodamachine) {
+        function anim() {
+            let dt = clock.getDelta()
+            sodamachine.scale.x -= 1.5 * dt
+        sodamachine.scale.y -= 1.5 * dt
+        sodamachine.scale.z -= 1.5 * dt
+        setTimeout(() => {
+            if (scene) {
+                scene.remove(sodamachine)
+                return
+            }
+        }, 5000)
+        requestAnimationFrame(anim)
+        }
+        anim()
+    }
+}
+
+
+// --- GRABPACK WALKING ---
 let walking = false;
 let walkStartTime = 0;
-// --- Animação suave do grabpack baseada em movimento e rotação ---
-let grabpackBaseY = -1; // posição inicial
+
+let grabpackBaseY = -1;
 let prevCamPos = new THREE.Vector3();
 let prevCamRot = new THREE.Euler();
 
 function animateGrabpackWalking() {
     if (!grabpack) return;
 
-    // detecta se a câmera se moveu ou rotacionou
-    const moved = !camera.position.equals(prevCamPos) || 
-                  camera.rotation.y !== prevCamRot.y;
+    const camMoved =
+        !camera.position.equals(prevCamPos) ||
+        camera.rotation.y !== prevCamRot.y;
 
-    if (moved) {
-        const t = performance.now() / 200; // velocidade da animação
+    const now = performance.now();
+    const t = now * 0.004;
 
-        const targetY = grabpackBaseY + Math.sin(t) * 0.2;
-        grabpack.position.y += (targetY - grabpack.position.y) * 0.1;
+    const active = camMoved ? 1 : 0;
 
-        const targetRotX = Math.sin(t) * 0.05;
-        grabpack.rotation.x += (targetRotX - grabpack.rotation.x) * 0.1;
-    } else {
-        // volta suavemente para posição base
-        grabpack.position.y += (grabpackBaseY - grabpack.position.y) * 0.1;
-        grabpack.rotation.x += (0 - grabpack.rotation.x) * 0.1;
+    const targetY =
+        grabpackBaseY +
+        Math.sin(t * 2.3) * 0.07 * active;
+
+    const targetRotX =
+        -0.03 * active +
+        Math.sin(t * 3.2) * 0.015 * active;
+
+    const smooth = 0.12;
+
+    grabpack.position.y += (targetY - grabpack.position.y) * smooth;
+    grabpack.rotation.x += (targetRotX - grabpack.rotation.x) * smooth;
+
+    if (!camMoved) {
+        const restSmooth = 0.1;
+        grabpack.position.y += (grabpackBaseY - grabpack.position.y) * restSmooth;
+        grabpack.rotation.x += (0 - grabpack.rotation.x) * restSmooth;
     }
 
-    // guarda posição e rotação para próxima verificação
     prevCamPos.copy(camera.position);
     prevCamRot.copy(camera.rotation);
 }
 
+let prevYaw = 0;
+let prevPitch = 0;
+let rotOffsetX = 0;
+let rotOffsetZ = 0;
 
-// --- Detecta tecla de movimento ---
-document.addEventListener('keydown', (e) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW','KeyA','KeyS','KeyD'].includes(e.code)) {
-        walking = true;
-        walkStartTime = performance.now();
+function animateGrabpackRotation() {
+    if (!grabpack) return;
+
+    const yaw = movimento.state.yaw;
+    const pitch = movimento.state.pitch;
+
+    const yawDelta = (yaw - prevYaw) * 50;
+    const pitchDelta = (pitch - prevPitch) * 50;
+
+    const active = (Math.abs(yawDelta) + Math.abs(pitchDelta)) > 0.0001 ? 1 : 0;
+
+    const tiltAmount = 0.02 * active;
+    const upDownAmount = 0.02 * active;
+
+    const targetZ = -yawDelta * tiltAmount;
+    const targetX = pitchDelta * upDownAmount;
+
+    const smooth = 0.1;
+
+    rotOffsetZ += (targetZ - rotOffsetZ) * smooth;
+    rotOffsetX += (targetX - rotOffsetX) * smooth;
+
+    grabpack.rotation.z = rotOffsetZ;
+    grabpack.rotation.x += rotOffsetX * 0.5;
+
+    if (!active) {
+        rotOffsetZ *= 0.85;
+        rotOffsetX *= 0.85;
     }
-});
+
+    prevYaw = yaw;
+    prevPitch = pitch;
+}
+
+const handscannerSystem = handscannerp1(scene, collidables, camera);
 
 // Resize
 window.addEventListener('resize', () => {
@@ -214,14 +367,29 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+movesodamachine()
 
-
-// Loop de animação
+// ANIMATE
 function animate() {
     requestAnimationFrame(animate);
+
     movimento.update();
-    animateGrabpackWalking(); // atualiza animação do grabpack
+    animateGrabpackWalking();
+    animateGrabpackRotation();
+    handscannerSystem.update();
+
+    // --- ANIMAÇÃO SUAVE DO BLUEHAND ---
+    if (bluehandFlying && bluehand) {
+        const lerpSpeed = 0.05;
+
+        bluehand.position.lerp(bluehandTargetPos, lerpSpeed);
+        bluehand.quaternion.slerp(bluehandTargetQuat, lerpSpeed);
+
+        // quando chegar perto, para
+        if (bluehand.position.distanceTo(bluehandTargetPos) < 0.05) {
+            bluehandFlying = false;
+        }
+    }
     renderer.render(scene, camera);
 }
 animate();
-
