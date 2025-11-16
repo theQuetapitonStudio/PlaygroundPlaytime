@@ -38,17 +38,36 @@ floor.position.y = -5;
 boost(floor)
 scene.add(floor);
 
-// Luz ambiente
-const ambient = new THREE.AmbientLight(0x808080, 1);
+const ambient = new THREE.AmbientLight(0x303030, 0.35);
 scene.add(ambient);
 
-const rim1 = new THREE.DirectionalLight(0x4fb3ff, 0.5);
-rim1.position.set(5, 6, -6);
-scene.add(rim1);
+const hemi = new THREE.HemisphereLight(0x87CEFA, 0x101014, 0.5);
+scene.add(hemi);
 
-const rim2 = new THREE.DirectionalLight(0xffb47a, 0.3);
-rim2.position.set(0, 8, -15);
-scene.add(rim2);
+const key = new THREE.DirectionalLight(0xffffff, 1);
+key.position.set(6, 12, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+scene.add(key);
+
+const rimL = new THREE.DirectionalLight(0x7fffd4, 0.45);
+rimL.position.set(-8, 6, -4);
+scene.add(rimL);
+
+const rimR = new THREE.DirectionalLight(0xffaaaa, 0.45);
+rimR.position.set(8, 6, -4);
+scene.add(rimR);
+
+const rimBack = new THREE.DirectionalLight(0xffffff, 0.3);
+rimBack.position.set(0, 8, -12);
+scene.add(rimBack);
+
+const spot1 = new THREE.SpotLight(0xffe6b3, 0.8, 30, Math.PI / 8, 0.6, 1);
+spot1.position.set(0, 9, 0);
+spot1.target.position.set(0, 0, 6);
+spot1.castShadow = true;
+scene.add(spot1);
+scene.add(spot1.target);
 
 function boost(obj) {
     obj.traverse(c => {
@@ -263,6 +282,10 @@ function movesodamachine(sodamachine, cena) {
             sodamachine.scale.x -= 1.5 * dt
         sodamachine.scale.y -= 1.5 * dt
         sodamachine.scale.z -= 1.5 * dt
+        sodamachine.rotation.x -= 1.5 * dt
+        sodamachine.rotation.y -= 1.5 * dt
+        sodamachine.rotation.z -= 1.5 * dt
+        sodamachine.position.y -= 0.5
         setTimeout(() => {
             if (scene) {
                 scene.remove(sodamachine)
@@ -366,8 +389,6 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-movesodamachine()
 
 // ANIMATE
 function animate() {
